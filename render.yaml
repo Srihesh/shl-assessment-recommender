@@ -4,8 +4,5 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt && python prepare_catalog.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: GROQ_API_KEY
-        sync: false   # set this manually in Render dashboard
     healthCheckPath: /health
     autoDeploy: true

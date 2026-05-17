@@ -1,6 +1,5 @@
 fastapi==0.121.1
 uvicorn[standard]==0.38.0
-httpx==0.28.1
 sentence-transformers==5.1.2
 faiss-cpu==1.13.0
 pydantic==2.12.4
