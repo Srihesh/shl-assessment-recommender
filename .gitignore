@@ -19,3 +19,4 @@ venv/
 # Do NOT ignore:
 # catalog.json  ← must be committed so Render doesn't need to run prepare_catalog.py at build time
 # SHL_catalogue.json is large but needed for prepare_catalog.py
+SHL_catalogue.json
