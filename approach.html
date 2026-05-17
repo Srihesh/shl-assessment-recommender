@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; font-size: 14px; line-height: 1.6; color: #222; }
+  h1 { font-size: 22px; border-bottom: 2px solid #333; padding-bottom: 8px; }
+  h2 { font-size: 16px; margin-top: 24px; color: #111; }
+  p { margin: 8px 0; text-align: justify; }
+  @media print { body { margin: 20px; } }
+</style>
+</head>
+<body>
+<h1>SHL Assessment Recommender — Approach Document</h1>
+<br>
+<h2>1. Catalog Extraction</h2>
+<br>
+<p>The catalog was sourced from a pre-scraped `SHL_catalogue.json` containing **377 Individual Test Solution entries** from `shl.com/products/product-catalog/`. Each entry includes name, canonical URL, description, job levels, duration, remote-testing flag, and a `keys` array that classifies the product (e.g., "Ability & Aptitude", "Personality & Behavior", "Knowledge & Skills", "Simulations"). A `prepare_catalog.py` script normalises this raw JSON into `catalog.json` by remapping `link → url`, mapping the `keys` array to a single-letter `test_type` code using a priority order (A > P > B > S > E > C > D > K), and converting `remote: "yes"/"no"` to a boolean. De-duplication by URL is applied before writing. The catalog contains products across all eight key categories, covering ability, personality, situational judgment, knowledge/skills, simulations, and assessment exercises.</p>
+<br>
+<h2>2. Retrieval Setup</h2>
+<br>
+<p>Embedding model: `all-MiniLM-L6-v2` (sentence-transformers), a 384-dimensional model that is fast on CPU (~50ms per batch), fully local (no API cost or latency), and well-calibrated for short professional-domain text. Vector store: FAISS `IndexFlatIP` (exact inner-product search over L2-normalised vectors, equivalent to cosine similarity). The index is built at server startup, taking under 5 seconds for 377 items. Each catalog entry is indexed as a single concatenated string: `"{name}. {description}. Job levels: {competencies}. Type: {test_type_full}. Duration: {duration}. Remote: yes/no."` At query time, the user's full message history is concatenated (with the last message doubled for recency weighting) into one query, embedded, and searched with `top_k=15`. The LLM then reranks this to ≤10 for the final shortlist.</p>
+<br>
+<h2>3. Agent Design</h2>
+<br>
+<p>The agent uses four behavioural modes detected via fast keyword heuristics (no LLM involved, keeping latency low). **CLARIFY**: triggered when no role-signal words (e.g., "developer", "manager", "analyst") appear in the full user history; the agent asks exactly one focused question. **RECOMMEND**: triggered when role context is present; runs retrieval then calls the LLM. **REFINE**: triggered when a prior shortlist exists in the assistant's history and the user message contains modification signals ("actually", "add", "remove", "shorter"). **COMPARE**: triggered by phrases like "compare", "vs", "difference between". Turn budget: if ≥6 turns have elapsed with no recommendation yet, `should_force_recommend()` returns True and overrides the mode to RECOMMEND. Out-of-scope detection runs before any LLM call and covers salary/legal/pricing queries and prompt-injection patterns.</p>
+<br>
+<h2>4. Prompt Design</h2>
+<br>
+<p>The system prompt is injected verbatim as specified in the assignment. At runtime, `{catalog_context}` is replaced with a numbered list of the top-15 retrieved assessments (name, URL, type, duration, job levels, description excerpt — all taken directly from `catalog.json`). `{conversation_history}` is replaced with the full message history formatted as alternating "Hiring Manager / Advisor" turns. The LLM is instructed to return a strict JSON object with exactly three keys: `reply`, `recommendations`, and `end_of_conversation`. The `validate_recommendations()` function then hard-drops any recommendation whose URL is not present in the set of valid URLs from `catalog.json`, preventing hallucinated URLs from ever reaching the API response.</p>
+<br>
+<h2>5. Evaluation</h2>
+<br>
+<p>All eight behavioural probes from the assignment specification were tested locally via `curl`. Key results: (a) Vague messages ("I need an assessment") consistently trigger a clarifying question with `recommendations: []`. (b) Clear role messages ("Hiring a senior Java developer") return 5–10 relevant assessments with real catalog URLs. (c) Refinements ("add personality tests too") correctly update the shortlist without losing the original role context. (d) Off-topic and prompt-injection inputs return the refusal message without crashing. (e) Turn-6 force-recommend fires correctly when the conversation is still in clarify mode. URL validation catches any hallucinated URLs before they leave the service. Recall@10 is maximised by retrieving 15 candidates and letting the LLM rerank.</p>
+<br>
+<h2>6. AI Tools Used</h2>
+<br>
+<p>Antigravity (Google DeepMind agentic coding assistant) was used to scaffold all five source files (`prepare_catalog.py`, `retrieval.py`, `agent.py`, `main.py`, and this document). The assistant generated the FAISS index-building logic, SYSTEM_PROMPT_TEMPLATE verbatim from the assignment, the mode-detection heuristics, and the LLM call wrappers (Groq + Gemini fallback). The catalog (`SHL_catalogue.json`) was scraped independently prior to this session. All business logic — mode priorities, URL validation, turn budget rules, out-of-scope signals — was specified by the assignment and implemented as directed. Final integration, testing, and deployment configuration were performed by the developer.</p>
+<br></body></html>

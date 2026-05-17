@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+
+# Model cache (sentence-transformers downloads here)
+# These are re-downloaded on first run
+.cache/
+
+# Mac
+.DS_Store
+
+# Do NOT ignore:
+# catalog.json  ← must be committed so Render doesn't need to run prepare_catalog.py at build time
+# SHL_catalogue.json is large but needed for prepare_catalog.py
