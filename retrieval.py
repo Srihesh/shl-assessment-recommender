@@ -2,14 +2,13 @@ from __future__ import annotations
 import json
 import pathlib
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
-_vectorizer: TfidfVectorizer | None = None
-_matrix = None
+_embeddings: np.ndarray | None = None
+_model = None
 _catalog: list[dict] = []
 
 CATALOG_PATH = pathlib.Path(__file__).parent / "catalog.json"
+MODEL_NAME   = "BAAI/bge-small-en-v1.5"  # 24MB ONNX, no PyTorch
 
 def _text(item: dict) -> str:
     levels = " ".join(item.get("competencies", []))
@@ -22,31 +21,39 @@ def _text(item: dict) -> str:
     )
 
 def build_index(catalog: list[dict]) -> None:
-    global _vectorizer, _matrix, _catalog
-    print(f"[retrieval] building TF-IDF index over {len(catalog)} items...")
+    global _embeddings, _model, _catalog
+    from fastembed import TextEmbedding
+
+    print(f"[retrieval] loading {MODEL_NAME}...")
+    _model   = TextEmbedding(MODEL_NAME)
     _catalog = catalog
+
     texts = [_text(item) for item in catalog]
-    _vectorizer = TfidfVectorizer(
-        ngram_range=(1, 2),
-        min_df=1,
-        max_features=20000,
-        sublinear_tf=True,
-    )
-    _matrix = _vectorizer.fit_transform(texts)
-    print(f"[retrieval] index ready — {_matrix.shape[0]} docs, {_matrix.shape[1]} features")
+    print(f"[retrieval] embedding {len(texts)} items...")
+    raw = list(_model.embed(texts))
+    _embeddings = np.array(raw, dtype="float32")
+
+    # L2-normalise for cosine via dot product
+    norms = np.linalg.norm(_embeddings, axis=1, keepdims=True)
+    _embeddings = _embeddings / np.where(norms == 0, 1, norms)
+    print(f"[retrieval] index ready — {_embeddings.shape[0]} vectors, dim={_embeddings.shape[1]}")
 
 def retrieve(query: str, top_k: int = 15) -> list[dict]:
-    if _vectorizer is None or _matrix is None:
+    if _model is None or _embeddings is None:
         raise RuntimeError("build_index() not called")
-    q_vec = _vectorizer.transform([query])
-    scores = cosine_similarity(q_vec, _matrix).flatten()
-    top_indices = np.argsort(scores)[::-1][:top_k]
+
+    q_vec = np.array(list(_model.embed([query])), dtype="float32")
+    norm  = np.linalg.norm(q_vec)
+    q_vec = q_vec / (norm if norm > 0 else 1)
+
+    scores     = (_embeddings @ q_vec.T).flatten()
+    top_idx    = np.argsort(scores)[::-1][:top_k]
+
     results = []
-    for idx in top_indices:
-        if scores[idx] > 0:
-            entry = dict(_catalog[idx])
-            entry["_score"] = float(scores[idx])
-            results.append(entry)
+    for idx in top_idx:
+        entry = dict(_catalog[idx])
+        entry["_score"] = float(scores[idx])
+        results.append(entry)
     return results
 
 def retrieve_by_name(name: str) -> dict | None:

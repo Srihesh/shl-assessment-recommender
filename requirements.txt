@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-scikit-learn
+fastembed
 pydantic
 python-dotenv
 numpy
