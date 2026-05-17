@@ -73,3 +73,18 @@ def build_retrieval_query(messages: list) -> str:
 
 def format_history(messages: list) -> str:
     return "\n".join(("Hiring Manager" if m.role == "user" else "Advisor") + ": " + m.content for m in messages)
+
+def extract_assessment_names(text: str) -> list[str]:
+    # pull names from: "compare X and Y", "difference between X and Y", "X vs Y"
+    text = text.strip()
+    names: list[str] = []
+    for pat in [
+        r"(?:compare|between|versus|vs\.?)\s+(.+?)\s+(?:and|vs\.?|versus)\s+(.+?)(?:\?|$)",
+        r"(.+?)\s+(?:vs\.?|versus)\s+(.+?)(?:\?|$)",
+    ]:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            names = [m.group(1).strip(), m.group(2).strip()]
+            break
+    return [n for n in names if len(n) > 2]
+

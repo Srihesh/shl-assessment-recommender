@@ -75,7 +75,13 @@ def chat(request: ChatRequest) -> ChatResponse:
     # retrieve
     hits: list[dict] = []
     query = agent.build_retrieval_query(messages)
-    if mode in ("recommend", "refine", "compare"):
+    if mode == "compare":
+        # extract named assessments from last user message and look up directly
+        named = agent.extract_assessment_names(last_user_msg)
+        hits = [h for n in named for h in [retrieval.retrieve_by_name(n)] if h]
+        if not hits:
+            hits = retrieval.retrieve(query, top_k=6)
+    elif mode in ("recommend", "refine"):
         hits = retrieval.retrieve(query, top_k=15)
 
     # recommend
